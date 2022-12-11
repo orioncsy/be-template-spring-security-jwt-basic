@@ -1,5 +1,6 @@
 package com.codestates.member.service;
 
+import com.codestates.auth.utils.CustomAuthorityUtils;
 import com.codestates.exception.BusinessLogicException;
 import com.codestates.exception.ExceptionCode;
 import com.codestates.helper.event.MemberRegistrationApplicationEvent;
@@ -9,11 +10,13 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -27,18 +30,28 @@ import java.util.Optional;
 public class MemberService {
     private final MemberRepository memberRepository;
     private final ApplicationEventPublisher publisher;
+    private final PasswordEncoder passwordEncoder;
+    private final CustomAuthorityUtils authorityUtils;
 
     public MemberService(MemberRepository memberRepository,
-                         ApplicationEventPublisher publisher) {
+                         ApplicationEventPublisher publisher, PasswordEncoder passwordEncoder, CustomAuthorityUtils authorityUtils) {
         this.memberRepository = memberRepository;
         this.publisher = publisher;
 
+        this.passwordEncoder = passwordEncoder;
+        this.authorityUtils = authorityUtils;
     }
 
     public Member createMember(Member member) {
         verifyExistsEmail(member.getEmail());
-        Member savedMember = memberRepository.save(member);
 
+        String encryptedPassword = passwordEncoder.encode(member.getPassword());
+        member.setPassword(encryptedPassword);
+
+        List<String> roles = authorityUtils.createRoles(member.getEmail());
+        member.setRoles(roles);
+
+        Member savedMember = memberRepository.save(member);
         // 추가된 부분
         publisher.publishEvent(new MemberRegistrationApplicationEvent(this, savedMember));
         return savedMember;
